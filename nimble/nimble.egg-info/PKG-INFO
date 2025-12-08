@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: nimble
+Version: 0.0.1
+Summary: A package to run NIMBLE. Original (and the hardwork) by Nabeel, small tweaks by TomC.
+Author-email: Nabeel Rehemtulla  <tom.m.callingham@gmail.com>, Tom Callingham <tom.m.callingham@gmail.com>
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: astropy
+
+
+

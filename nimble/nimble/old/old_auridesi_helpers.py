@@ -1,35 +1,41 @@
 from astropy.table import Table
+
 # from astropy.io import fits
 import astropy.coordinates as coord
 import astropy.units as u
 
 import numpy as np
+
 # import pandas as pd
 import h5py
 import agama
 import matplotlib.pyplot as plt
 # from matplotlib.patches import Polygon
 
-Gmax  = 19.0
-Gmin  = 16.0
-Grrl  = 0.58
+Gmax = 19.0
+Gmin = 16.0
+Grrl = 0.58
 DMerr = 0.24
-bmin  = 20.0
-decmin=-35.0
-d2r   = np.pi/180
+bmin = 20.0
+decmin = -35.0
+d2r = np.pi / 180
 
 # adapted from Alex Riley's AuriDESI tutorial and Namitha's how_to_use_mocks.ipynb
 # https://github.com/desimilkyway/tutorials/blob/main/ahriley/auridesi-demo-hawaii.ipynb
-nersc_path = "/global/cfs/cdirs/desi/users/namitha/Aurigaia/AuriDESI_Mocks_Spectroscopic_Catalog"
+nersc_path = (
+    "/global/cfs/cdirs/desi/users/namitha/Aurigaia/AuriDESI_Mocks_Spectroscopic_Catalog"
+)
+auridesi_folder = "data/AuriDESI/"
+auridesi_folder = "~/data/observations/local_desi/y3kp/field-stars/mocks/auridesi/"
 
 
 def get_lsr_frame(halonum):
-    galcen_distance = 8.000*u.kpc
-    z_sun = 2e-2*u.kpc
+    galcen_distance = 8.000  # * u.kpc
+    z_sun = 2e-2  # * u.kpc
 
     usun = 11.1
     vsun = 12.24
-    wsun =  7.25
+    wsun = 7.25
 
     if halonum == "06":
         vlsr = 229.2225816451948
@@ -48,9 +54,10 @@ def get_lsr_frame(halonum):
         exit()
 
     vsun = vsun + vlsr
-    galcen_v_sun = [usun, vsun, wsun]*u.km/u.s
+    galcen_v_sun = [usun, vsun, wsun]  # * u.km / u.s
 
-    return galcen_distance.value, galcen_v_sun.value, z_sun.to(u.kpc).value
+    # return galcen_distance.value, galcen_v_sun.value, z_sun.to(u.kpc).value
+    return galcen_distance, galcen_v_sun, z_sun
 
 
 # def write_mockRRL(halonum, lsrdeg, source_path = None, write_path = None):
@@ -140,84 +147,106 @@ def write_true(halonum):
     Auriga halos downloaded from:
     https://wwwmpa.mpa-garching.mpg.de/auriga/data.html
     """
-    filename = f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
-    f = h5py.File(filename, 'r')
+    filename = (
+        f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+    )
+    with h5py.File(filename, "r") as hf:
+        # (Z, Y, X) converted from Mpc to kpc
+        star_wind_coordinates = np.asarray(hf["PartType4"]["Coordinates"][:]) * 1000.0
+        # converted from 10^10 Msun to 1 Msun
+        star_wind_masses = np.asarray(hf["PartType4"]["Masses"][:]) * 1e10
 
-    # (Z, Y, X) converted from Mpc to kpc
-    star_wind_coordinates   = f['PartType4']['Coordinates'][:]*1000.
-    # converted from 10^10 Msun to 1 Msun
-    star_wind_masses        = f['PartType4']['Masses'][:]*1e10
+        dm_coordinates = np.asarray(hf["PartType1"]["Coordinates"][:]) * 1000.0
+        dm_masses = np.asarray(hf["PartType1"]["Masses"][:]) * 1e10
 
-    dm_coordinates = f['PartType1']['Coordinates'][:]*1000.
-    dm_masses      = f['PartType1']['Masses'][:]*1e10
+        gas_coordinates = np.asarray(hf["PartType0"]["Coordinates"][:]) * 1000.0
+        gas_masses = np.asarray(hf["PartType0"]["Masses"][:]) * 1e10
 
-    gas_coordinates = f['PartType0']['Coordinates'][:]*1000.
-    gas_masses      = f['PartType0']['Masses'][:]*1e10
+        bh_coordinates = np.asarray(hf["PartType5"]["Coordinates"][:]) * 1000.0
+        bh_masses = np.asarray(hf["PartType5"]["Masses"][:]) * 1e10
 
-    bh_coordinates = f['PartType5']['Coordinates'][:]*1000.
-    bh_masses      = f['PartType5']['Masses'][:]*1e10
-
-    f.close()
-
-    total_mass = np.sum(np.hstack((dm_masses, star_wind_masses,
-                                   gas_masses, bh_masses)))
-    print("total mass (1e12 Msun):", total_mass/1e12)
+    total_mass = np.sum(np.hstack((dm_masses, star_wind_masses, gas_masses, bh_masses)))
+    print("total mass (1e12 Msun):", total_mass / 1e12)
 
     # r_sph = sqrt(x^2 + y^2 + z^2)
-    star_wind_radii = np.sqrt((star_wind_coordinates[:,2] ** 2) + (star_wind_coordinates[:,1] ** 2) + (star_wind_coordinates[:,0] ** 2))
-    gas_radii = np.sqrt((gas_coordinates[:,2] ** 2) + (gas_coordinates[:,1] ** 2) + (gas_coordinates[:,0] ** 2))
-    dm_radii = np.sqrt((dm_coordinates[:,2] ** 2) + (dm_coordinates[:,1] ** 2) + (dm_coordinates[:,0] ** 2))
-    bh_radii = np.sqrt((bh_coordinates[:,2] ** 2) + (bh_coordinates[:,1] ** 2) + (bh_coordinates[:,0] ** 2))
+    star_wind_radii = np.sqrt(
+        (star_wind_coordinates[:, 2] ** 2)
+        + (star_wind_coordinates[:, 1] ** 2)
+        + (star_wind_coordinates[:, 0] ** 2)
+    )
+    gas_radii = np.sqrt(
+        (gas_coordinates[:, 2] ** 2)
+        + (gas_coordinates[:, 1] ** 2)
+        + (gas_coordinates[:, 0] ** 2)
+    )
+    dm_radii = np.sqrt(
+        (dm_coordinates[:, 2] ** 2)
+        + (dm_coordinates[:, 1] ** 2)
+        + (dm_coordinates[:, 0] ** 2)
+    )
+    bh_radii = np.sqrt(
+        (bh_coordinates[:, 2] ** 2)
+        + (bh_coordinates[:, 1] ** 2)
+        + (bh_coordinates[:, 0] ** 2)
+    )
 
     # rows are particles
     # column 0 is spherical galactocentric radius
     # column 1 is particle mass
-    star_wind = np.column_stack((star_wind_radii, star_wind_masses))[star_wind_radii.argsort()]
+    star_wind = np.column_stack((star_wind_radii, star_wind_masses))[
+        star_wind_radii.argsort()
+    ]
     gas = np.column_stack((gas_radii, gas_masses))[gas_radii.argsort()]
     dm = np.column_stack((dm_radii, dm_masses))[dm_radii.argsort()]
     bh = np.column_stack((bh_radii, bh_masses))[bh_radii.argsort()]
 
-    rgrid = np.linspace(0,120,1000)
+    rgrid = np.linspace(0, 120, 1000)
 
-    M_cumul_star_wind = np.interp(rgrid, star_wind[:,0], np.cumsum(star_wind[:,1]))
-    M_cumul_gas       = np.interp(rgrid, gas[:,0],       np.cumsum(gas[:,1]))
-    M_cumul_dm        = np.interp(rgrid, dm[:,0],        np.cumsum(dm[:,1]))
-    M_cumul_bh        = np.interp(rgrid, bh[:,0],        np.cumsum(bh[:,1]))
+    M_cumul_star_wind = np.interp(rgrid, star_wind[:, 0], np.cumsum(star_wind[:, 1]))
+    M_cumul_gas = np.interp(rgrid, gas[:, 0], np.cumsum(gas[:, 1]))
+    M_cumul_dm = np.interp(rgrid, dm[:, 0], np.cumsum(dm[:, 1]))
+    M_cumul_bh = np.interp(rgrid, bh[:, 0], np.cumsum(bh[:, 1]))
 
     M_cumul = M_cumul_star_wind + M_cumul_gas + M_cumul_dm + M_cumul_bh
 
     np.savetxt(
         fname=f"data/auriga/H{halonum}/Au{halonum}_true.csv",
-        X=np.stack([rgrid, M_cumul], axis=1), delimiter=',',
-        header="r [kpc], M(<r)_true [Msun]"
+        X=np.stack([rgrid, M_cumul], axis=1),
+        delimiter=",",
+        header="r [kpc], M(<r)_true [Msun]",
     )
 
     plt.figure()
-    plt.plot(rgrid, M_cumul, label='total')
-    plt.plot(rgrid, M_cumul_star_wind, label='star_wind')
-    plt.plot(rgrid, M_cumul_gas, label='gas')
-    plt.plot(rgrid, M_cumul_dm, label='dm')
-    plt.plot(rgrid, M_cumul_bh, label='bh')
+    plt.plot(rgrid, M_cumul, label="total")
+    plt.plot(rgrid, M_cumul_star_wind, label="star_wind")
+    plt.plot(rgrid, M_cumul_gas, label="gas")
+    plt.plot(rgrid, M_cumul_dm, label="dm")
+    plt.plot(rgrid, M_cumul_bh, label="bh")
     plt.legend()
     plt.xlabel("Galactocentric radius [kpc]")
     plt.ylabel("Mass enclosed [Msun]")
     plt.title(f"Auriga H{halonum}")
-    plt.savefig(f"data/auriga/H{halonum}/Au{halonum}_true.pdf", bbox_inches='tight')
+    plt.savefig(f"data/auriga/H{halonum}/Au{halonum}_true.pdf", bbox_inches="tight")
     plt.cla()
 
     print(f"Finished writing true mass profile of Auriga halo{halonum}\n")
 
 
-def halo_velocity_density_profiles(halonum):
-    filename = f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+def old_halo_velocity_density_profiles(halonum):
+    filename = (
+        f"data/auriga/H{halonum}/snapshot_reduced_temprho_halo_{halonum}_063.hdf5"
+    )
 
-    f = h5py.File(filename, 'r')
-
-    # Extract data from Auriga hdf5 file
-    coordinates = f['PartType4']['Coordinates'][:]*1000  # (Z, Y, X) in kpc
-    velocities  = f['PartType4']['Velocities'] [:]       # (Vz, Vy, Vx) in km/s
-    metallicity = f['PartType4']['GFM_Metallicity']         [:]
-    form_time   = f['PartType4']['GFM_StellarFormationTime'][:] # Gyr
+    with h5py.File(filename, "r") as hf:
+        # Extract data from Auriga hdf5 file
+        coordinates = (
+            np.asarray(hf["PartType4"]["Coordinates"][:]) * 1000
+        )  # (Z, Y, X) in kpc
+        velocities = np.asarray(
+            hf["PartType4"]["Velocities"][:]
+        )  # (Vz, Vy, Vx) in km/s
+        metallicity = np.asarray(hf["PartType4"]["GFM_Metallicity"][:])
+        form_time = np.asarray(hf["PartType4"]["GFM_StellarFormationTime"][:])  # Gyr
 
     # Set floor for halo metallicity
     metal_mask = metallicity < 1e-7
@@ -227,122 +256,185 @@ def halo_velocity_density_profiles(halonum):
     # Old, low metallicity to select halo - also removes wind particles
     halo = (log_metallicity < -1.5) & (form_time > 8)
 
-    x = coordinates[:,2][halo]
-    y = coordinates[:,1][halo]
-    z = coordinates[:,0][halo]
+    x = coordinates[:, 2][halo]
+    y = coordinates[:, 1][halo]
+    z = coordinates[:, 0][halo]
 
-    vx = velocities[:,2][halo]
-    vy = velocities[:,1][halo]
-    vz = velocities[:,0][halo]
+    vx = velocities[:, 2][halo]
+    vy = velocities[:, 1][halo]
+    vz = velocities[:, 0][halo]
 
-    radii = np.sqrt((x ** 2) + (y ** 2) + (z ** 2))
+    radii = np.sqrt((x**2) + (y**2) + (z**2))
     rvel, tvel, pvel = cartesian_to_spherical(x, y, z, vx, vy, vz)
 
     truesig_knots = np.logspace(0, np.log10(100), 5)
 
     # velocity squared as function of log r
-    true_sigmar = agama.splineApprox(np.log(truesig_knots),
-                                     np.log(radii), rvel**2)
-    true_sigmat = agama.splineApprox(np.log(truesig_knots),
-                                     np.log(radii), (tvel**2 + pvel**2)/2)
+    true_sigmar = agama.splineApprox(np.log(truesig_knots), np.log(radii), rvel**2)
+    true_sigmat = agama.splineApprox(
+        np.log(truesig_knots), np.log(radii), (tvel**2 + pvel**2) / 2
+    )
 
     return true_sigmar, true_sigmat, radii
 
 
-def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
-    fname = f"data/AuriDESI/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_rrl.fits"
+true_vel_folder = f"~/data/observations/local_desi/y3kp/true-profiles/auriga/velocity-profiles-4monica/"
 
-    rvtab =    Table.read(fname, hdu='rvtab')
-    fibermap = Table.read(fname, hdu='fibermap')
-    gaia =     Table.read(fname, hdu='gaia')
+
+import pickle
+from scipy.interpolate import UnivariateSpline
+
+
+def halo_velocity_density_profiles(halonum):
+    halofile = f"{true_vel_folder}halo{halonum}-level3-profiles-4monica.pickle"
+    # print(halofile)
+    with open(halofile, "rb") as handle:
+        rets = pickle.load(handle)
+
+    edges = rets["edges"]  # kpc, bin edges
+    counts = rets["counts"]  # Nstars
+    vmeans = rets["means"]  # km/s
+    v2s = rets["v2s"]  # km^2/s^2
+    sigmas = rets["sigmas"]  # km/s
+    density = rets["density"]  # Msun/kpc^3
+
+    # Ignoring mean velocities for now. Need to modify the deconv routine to use it
+    radii = edges[1:]
+    true_sigmar = UnivariateSpline(radii, sigmas[0, :], s=50)
+    true_sigmat = UnivariateSpline(
+        radii, np.sqrt(sigmas[1, :] ** 2 + sigmas[2, :] ** 2), s=50
+    )
+    true_tracedens = UnivariateSpline(radii, density, s=50)
+
+    return true_sigmar, true_sigmat, true_tracedens, radii
+
+
+def load(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
+    # fname = f"{auridesi_folder}/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_rrl.fits"
+
+    fname = (
+        f"{auridesi_folder}halo{int(halonum)}/halo{int(halonum)}-view{lsrdeg}-rrl.fits"
+    )
+
+    rvtab = Table.read(fname, hdu="rvtab")
+    fibermap = Table.read(fname, hdu="fibermap")
+    gaia = Table.read(fname, hdu="gaia")
     # true =     Table.read(fname, hdu='true_value')
 
     print("Number of initial particles:", len(rvtab))
 
     lsr_info = get_lsr_frame(halonum)
 
-    ra = np.asarray(gaia['RA'])  # deg
-    dec = np.asarray(gaia['DEC'])  # deg
-    ra  *= d2r  # ra and dec to rad
+    ra = np.asarray(gaia["RA"])  # deg
+    dec = np.asarray(gaia["DEC"])  # deg
+    ra *= d2r  # ra and dec to rad
     dec *= d2r
 
-    pmra = np.asarray(gaia['PMRA'])  # mas/yr
-    pmdec = np.asarray(gaia['PMDEC'])  # mas/yr
-    pmra_error = np.asarray(gaia['PMRA_ERROR'])  # mas/yr
-    pmdec_error = np.asarray(gaia['PMDEC_ERROR'])  # mas/yr
+    pmra = np.asarray(gaia["PMRA"])  # mas/yr
+    pmdec = np.asarray(gaia["PMDEC"])  # mas/yr
+    pmra_error = np.asarray(gaia["PMRA_ERROR"])  # mas/yr
+    pmdec_error = np.asarray(gaia["PMDEC_ERROR"])  # mas/yr
 
     # TODO: fix
+    # BUG: PM_ERR should be quadrature? Or is this the average error? Could have correlated
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     # Use fibermap['dist'] instead?
-    Gapp = np.asarray(fibermap['GAIA_PHOT_G_MEAN_MAG'])  # mag
+    Gapp = np.asarray(fibermap["GAIA_PHOT_G_MEAN_MAG"])  # mag
     # dist = 10**((Grrl - Gapp - 5)/-5)  # pc
 
-    vlos = np.asarray(fibermap['v_sys_Braga'])  # km/s
-    vloserr = np.asarray(fibermap['v_sys_Braga_err'])  # km/s
+    vlos = np.asarray(fibermap["v_sys_Braga"])  # km/s
+    vloserr = np.asarray(fibermap["v_sys_Braga_err"])  # km/s
 
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
-                                                    ra, dec, pmra, pmdec)
+    l_rad, b_rad, pml, pmb = agama.transformCelestialCoords(
+        agama.fromICRStoGalactic, ra, dec, pmra, pmdec
+    )
 
     # back to degrees
-    l   /= d2r
-    b   /= d2r
+    l_deg = l_rad / d2r
+    b_deg = b_rad / d2r
     dec /= d2r
 
-    filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
+    filt = (abs(b_deg) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
 
     true_sigmar, true_sigmat, true_dens_radii = halo_velocity_density_profiles(halonum)
 
-    return (l[filt], b[filt], true_dens_radii, Gapp[filt], pml[filt], pmb[filt],
-            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
+    return (
+        l_deg[filt],
+        b_deg[filt],
+        true_dens_radii,
+        Gapp[filt],
+        pml[filt],
+        pmb[filt],
+        vlos[filt],
+        PMerr[filt],
+        vloserr[filt],
+        true_sigmar,
+        true_sigmat,
+        lsr_info,
+    )
 
 
 def load_BHB(halonum, lsrdeg, SUBSAMPLE, VERBOSE):
     fname = f"data/AuriDESI/{lsrdeg}_deg/H{halonum}_{lsrdeg}deg_rrl.fits"
 
-    rvtab =    Table.read(fname, hdu='rvtab')
-    fibermap = Table.read(fname, hdu='fibermap')
-    gaia =     Table.read(fname, hdu='gaia')
+    rvtab = Table.read(fname, hdu="rvtab")
+    fibermap = Table.read(fname, hdu="fibermap")
+    gaia = Table.read(fname, hdu="gaia")
     # true =     Table.read(fname, hdu='true_value')
 
     print("Number of initial particles:", len(rvtab))
 
     lsr_info = get_lsr_frame(halonum)
 
-    ra = np.asarray(gaia['RA'])  # deg
-    dec = np.asarray(gaia['DEC'])  # deg
-    ra  *= d2r  # ra and dec to rad
+    ra = np.asarray(gaia["RA"])  # deg
+    dec = np.asarray(gaia["DEC"])  # deg
+    ra *= d2r  # ra and dec to rad
     dec *= d2r
 
-    pmra = np.asarray(gaia['PMRA'])  # mas/yr
-    pmdec = np.asarray(gaia['PMDEC'])  # mas/yr
-    pmra_error = np.asarray(gaia['PMRA_ERROR'])  # mas/yr
-    pmdec_error = np.asarray(gaia['PMDEC_ERROR'])  # mas/yr
+    pmra = np.asarray(gaia["PMRA"])  # mas/yr
+    pmdec = np.asarray(gaia["PMDEC"])  # mas/yr
+    pmra_error = np.asarray(gaia["PMRA_ERROR"])  # mas/yr
+    pmdec_error = np.asarray(gaia["PMDEC_ERROR"])  # mas/yr
 
     # TODO: fix
+    # BUG: should be quadrature
     PMerr = (pmra_error + pmdec_error) / 2  # mas/yr
 
     # Use fibermap['dist'] instead?
-    Gapp = np.asarray(fibermap['GAIA_PHOT_G_MEAN_MAG'])  # mag
+    Gapp = np.asarray(fibermap["GAIA_PHOT_G_MEAN_MAG"])  # mag
     # dist = 10**((Grrl - Gapp - 5)/-5)  # pc
 
-    vlos = np.asarray(fibermap['v_sys_Braga'])  # km/s
-    vloserr = np.asarray(fibermap['v_sys_Braga_err'])  # km/s
+    vlos = np.asarray(fibermap["v_sys_Braga"])  # km/s
+    vloserr = np.asarray(fibermap["v_sys_Braga_err"])  # km/s
 
-    l, b, pml, pmb = agama.transformCelestialCoords(agama.fromICRStoGalactic,
-                                                    ra, dec, pmra, pmdec)
+    l, b, pml, pmb = agama.transformCelestialCoords(
+        agama.fromICRStoGalactic, ra, dec, pmra, pmdec
+    )
 
     # back to degrees
-    l   /= d2r
-    b   /= d2r
+    l /= d2r
+    b /= d2r
     dec /= d2r
 
     filt = (abs(b) >= bmin) * (dec >= decmin) * (Gapp > Gmin) * (Gapp < Gmax)
 
     true_sigmar, true_sigmat, true_dens_radii = halo_velocity_density_profiles(halonum)
 
-    return (l[filt], b[filt], true_dens_radii, Gapp[filt], pml[filt], pmb[filt],
-            vlos[filt], PMerr[filt], vloserr[filt], true_sigmar, true_sigmat, lsr_info)
+    return (
+        l[filt],
+        b[filt],
+        true_dens_radii,
+        Gapp[filt],
+        pml[filt],
+        pmb[filt],
+        vlos[filt],
+        PMerr[filt],
+        vloserr[filt],
+        true_sigmar,
+        true_sigmat,
+        lsr_info,
+    )
 
 
 def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
@@ -354,11 +446,13 @@ def cartesian_to_spherical(xpos, ypos, zpos, xVel, yVel, zVel):
     cosPhi = xpos / np.sqrt(xpos**2 + ypos**2)
 
     for i in range(0, numParticles):
-        conversionMatrix = [[sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i],  cosTheta[i]],
-                            [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
-                            [       -sinPhi[i]      ,        cosPhi[i]       ,        0    ]]
+        conversionMatrix = [
+            [sinTheta[i] * cosPhi[i], sinTheta[i] * sinPhi[i], cosTheta[i]],
+            [cosTheta[i] * cosPhi[i], cosTheta[i] * sinPhi[i], -sinTheta[i]],
+            [-sinPhi[i], cosPhi[i], 0],
+        ]
 
-    velMatrix = [ xVel, yVel, zVel ]
+    velMatrix = [xVel, yVel, zVel]
 
     sphereVels = np.matmul(conversionMatrix, velMatrix)
 
