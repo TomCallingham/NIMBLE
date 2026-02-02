@@ -1,0 +1,46 @@
+[run]
+type = "AuriDesi"
+subsample = false
+verbose = true
+use_external_density = false
+
+# --- selection / flags ---
+# --- magnitude / distance parameters (shared, but values depend on run_type) ---
+Gmax = 20.0
+Gmin = 16.0
+Grrl = 0.58
+DMerr = 0.24
+bmin = 30.0
+decmin = -35.0
+
+# --- spline / knot settings ---
+min_knot = 5.0
+max_knot = 80.0
+num_knots = 4
+
+# --- radial range ---
+min_r = 1.0
+max_r = 100.0
+
+
+# output / data paths
+figs_root = "results/"
+figs_path = "results/"
+true_path = "true_path/"
+
+
+blow_rad = 0.0
+bupp = 0.0
+lsym = 0.0
+
+# Volume. Bad defaults
+# lmin_func: Callable = lambda x: x
+#
+[AuriDesi]
+halo_n = 6
+angle = 30
+Gmax = 19.0
+Gmin = 16.0
+bmin = 30.0
+min_r = 1.0
+max_r = 100.0

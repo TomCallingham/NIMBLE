@@ -18,7 +18,7 @@ def modelDensity(params, scfg: SmallConfig, truedens=False):
     else:
         dens_knots = scfg.knots_logr
     # reg ensures monotonic spline
-    logrho = agama.CubicSpline(dens_knots, knots_logdens, reg=True)
+    logrho = agama.Spline(dens_knots, knots_logdens, reg=True)
     # check that the density profile has a finite total mass
     # (this is not needed for the fit, because normalization is computed over accessible volume,
     # but it generally makes sense to have a physically valid model for the entire space).
@@ -85,13 +85,13 @@ def modelDensity(params, scfg: SmallConfig, truedens=False):
         )[0]
 
     # now renormalize the density profile to have unit integral over the selection volume
-    logrho = agama.CubicSpline(dens_knots, knots_logdens - np.log(norm), reg=True)
+    logrho = agama.Spline(dens_knots, knots_logdens - np.log(norm), reg=True)
     return logrho
 
 
 def modelSigma(params, scfg: SmallConfig):
     # params is array of log(sigma(r)) at radial knots (applicable to both velocity components)
-    return agama.CubicSpline(scfg.knots_logr, params)
+    return agama.Spline(scfg.knots_logr, params)
 
 
 def likelihood(params, fit_data, scfg: SmallConfig):
