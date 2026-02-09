@@ -5,8 +5,8 @@ import numpy as np
 
 def add_r_vel_obs_data(obs_data, solar_params):
     data_shape = obs_data["ra"].shape
-    if len(data_shape)>1:
-        for key in ["ra","dec","pmdec","pmra","vrad","distance"]:
+    if len(data_shape) > 1:
+        for key in ["ra", "dec", "pmdec", "pmra", "vrad", "distance"]:
             obs_data[key] = obs_data[key].ravel()
 
     u_kms = u.km / u.second
@@ -45,11 +45,25 @@ def add_r_vel_obs_data(obs_data, solar_params):
     obs_data["vel_gal"] = np.stack(
         [obs_data["vr"], obs_data["vtheta"], obs_data["vphi"]], axis=-1
     )  # (N, 3)
-    
-    if len(data_shape)>1:
-        for key in ["ra","dec","pmdec","pmra","vrad","distance",
-                    "r","vr","vphi","vtheta"]:
+
+    obs_data["v"] = np.linalg.norm(obs_data["vel_gal"], axis=-1)
+
+    if len(data_shape) > 1:
+        for key in [
+            "ra",
+            "dec",
+            "pmdec",
+            "pmra",
+            "vrad",
+            "distance",
+            "r",
+            "vr",
+            "vphi",
+            "vtheta",
+            "logr",
+        ]:
             obs_data[key] = obs_data[key].reshape(data_shape)
+        obs_data["vel_gal"] = obs_data["vel_gal"].reshape(*data_shape, 3)
 
     return obs_data
 
@@ -93,6 +107,5 @@ def cartesian_to_spherical_vel(pos: np.ndarray, vel: np.ndarray):
 
     vtheta = vx * e_th_x + vy * e_th_y + vz * e_th_z
     vphi = vx * e_ph_x + vy * e_ph_y
-
 
     return r, vr, vphi, vtheta

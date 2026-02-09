@@ -3,17 +3,17 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
-from .helpers.auridesi.auridesi_params import AuriDesiParams
+from .helpers.auridesi.auridesi_data import AuriDesiData
 
 d2r = np.pi / 180  # conversion from degrees to radians
 
 
 run_types = ["auridesi"]  # , "iron"]
-# RunTypeParams = Union[AuriDesiParams, IronParams]
-RunTypeParams = AuriDesiParams
+# RunTypeParams = Union[AuriDesiData, IronParams]
+RunTypeParams = AuriDesiData
 
 run_type_dispatch_dict = {
-    "auridesi": AuriDesiParams,
+    "auridesi": AuriDesiData,
     # "desi": DesiParams,
 }
 

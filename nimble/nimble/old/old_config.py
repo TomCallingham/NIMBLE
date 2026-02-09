@@ -6,14 +6,14 @@ from .footprint_boundary import getSurveyFootprintBoundary
 
 import numpy as np
 
-from .helpers.auridesi.auridesi_params import AuriDesiParams, AuriDesiParams_from_args
+from .helpers.auridesi.auridesi_data import AuriDesiData, AuriDesiData_from_args
 from .helpers.desi.desi_config import IronParams
 
 d2r = np.pi / 180  # conversion from degrees to radians
 
 
 run_types = ["auridesi", "iron"]
-RunTypeParams = Union[AuriDesiParams, IronParams]
+RunTypeParams = Union[AuriDesiData, IronParams]
 
 
 # ---------------------------------------------------------------------
@@ -120,7 +120,7 @@ class Config:
         # knot_override: Optional[Tuple[float, float, int]] = None
 
         if data_type == "auridesi":
-            cfg.run_type_params = AuriDesiParams.from_args(argv)
+            cfg.run_type_params = AuriDesiData.from_args(argv)
             cfg.figs_root = cfg.run_type_params.figs_root
             cfg.true_path = cfg.run_type_params.true_path
 

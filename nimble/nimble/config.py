@@ -20,7 +20,7 @@ class Config:
     #
     DMerr: float = 0.24
 
-    lsr_info: Optional[dict] = None
+    # lsr_info: Optional[dict] = None
 
     # --- spline / knot settings ---
     min_knot: float = 5.0
@@ -32,7 +32,7 @@ class Config:
     # output / data paths
     figs_root: str = "results/"
     figs_path: str = "results/"
-    true_path: Optional[str] = None
+    # true_path: Optional[str] = None
 
     def knots_logr(self):
         return np.linspace(np.log(self.min_knot), np.log(self.max_knot), self.num_knots)
@@ -40,17 +40,24 @@ class Config:
     def to_small(self):
         return SmallConfig(
             knots_logr=self.knots_logr(),
-            lsr_info=self.lsr_info,
+            # lsr_info=self.lsr_info,
             num_knots=self.num_knots,
         )
+
+    def set_knot_range_from_data(self, r, min_percentile=1, max_percentile=99):
+        print(f"Original min-max knot: {self.min_knot:.1f}-{self.max_knot:.1f}")
+        self.min_knot, self.max_knot = np.percentile(
+            r, [min_percentile, max_percentile]
+        )
+        print(f"New min-max knot: {self.min_knot:.1f}-{self.max_knot:.1f}")
 
 
 # A super slim data container to feed into fitting functions
 @dataclass
 class SmallConfig:
     knots_logr: np.ndarray
-    lsr_info: Any
     num_knots: int
+    # lsr_info: Any
     # Grrl: float
     # bupp: float
     # DMerr: float
