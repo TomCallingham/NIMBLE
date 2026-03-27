@@ -11,7 +11,8 @@ from ..config import Config
 import pandas as pd
 
 y3kp_folder = "/home/tcallingh/data/observations/local_desi/y3kp"
-loa_rrl_file = f"{y3kp_folder}/field-stars/loa/loa-rrl-latest.csv"
+# loa_rrl_file = f"{y3kp_folder}/field-stars/loa/loa-rrl-latest.csv"
+loa_rrl_file = f"{y3kp_folder}/field-stars/loa/loa-rrl_mass_modeling_20260223.csv"
 loa_bhb_file = f"{y3kp_folder}/field-stars/loa/loa-bhb-latest.fits"
 
 extra_y3kp_folder = "/home/tcallingh/data/observations/local_desi/callingham_new2/y3kp/"
@@ -33,6 +34,13 @@ sun_vel = np.array(
 sun_pos = np.array([-solar_params0["R0"], 0, solar_params0["z_sun"]]) * u.kpc
 
 solar_params = {"galcen_vsun": sun_vel, "galcen_pos": sun_pos}
+
+import pandas as pd
+
+y3kp_folder = "/home/tcallingh/data/observations/local_desi/y3kp"
+loa_rrl_file = f"{y3kp_folder}/field-stars/loa/loa-rrl_mass_modeling_20260223.csv"
+
+old_loa_rrl_file = f"{y3kp_folder}/field-stars/loa/loa-rrl-latest.csv"
 
 
 @dataclass(init=False)
@@ -57,8 +65,16 @@ class MWLoaData:
     def load_rrl_loa(
         self, all_cols=False, filter_sag=True, filter_dwarfs=True, filter_gcs=True
     ):
+
+        if not filter_sag & filter_dwarfs & filter_gcs:
+            raise AssertionError("Using new Gustavo RRL, all filters already applied!")
+
         dfp = pd.read_csv(loa_rrl_file)
-        dfp_flag = pd.read_csv(rrl_flag_fname)
+        old_dfp = pd.read_csv(old_loa_rrl_file)
+        dfp = dfp.join(
+            old_dfp.set_index("source_id")["pmra_pmdec_corr"], on="source_id"
+        )
+
         translate = {
             "distance": "dist_FEH",
             "distance_err": "dist_FEH_err",
@@ -83,33 +99,14 @@ class MWLoaData:
         ]
 
         data_dic = {key: dfp[translate.get(key, key)].to_numpy() for key in min_keys}
+
         if all_cols:
             cols = dfp.columns
-            for key in cols[:66]:
-                data_dic[f"gaia_{key}"] = dfp[key].to_numpy()
-            for key in cols[65:]:
-                data_dic[key] = dfp[key].to_numpy()
-        filt = np.ones(len(dfp["ra"]), dtype=bool)
-        if filter_sag:
-            sag_filt = ~dfp_flag["Sgr_flag"]
-            filt &= sag_filt
-        if filter_gcs:
-            gc_filt = ~dfp_flag["GC_flag"]
-            filt &= gc_filt
-        if filter_dwarfs:
-            dwarf_filt = ~dfp_flag["dwarf_flag"]
-            filt &= dwarf_filt
-        print(f"Substructure Filt Remaining: {filt.mean():.3f}, {filt.sum()} Total")
-
-        nan_filt = (~np.isnan(data_dic["pmra"])) & (~np.isnan(data_dic["pmdec"]))
-        print(f"Nan Filter:{nan_filt.mean():.3f}, {nan_filt.sum()} Total")
-        filt &= nan_filt
-
-        data_dic = {key: val[filt] for key, val in data_dic.items()}
+            data_dic = data_dic | {key: dfp[key].to_numpy() for key in cols}
         return data_dic
 
     def load_bhb_loa(self, all_cols=False, substructure_flags=True):
-        RVT, FT, GT = load_BHB_data(all_quality_flags=substructure_flags)
+        RVT, FT, GT = load_BHB_data(substructure_flags=substructure_flags)
         data_dict = (
             {key: np.asarray(val) for key, val in dict(RVT).items()}
             | {key: np.asarray(val) for key, val in dict(FT).items()}
@@ -140,6 +137,7 @@ class MWLoaData:
             "vrad",
             "pmra_err",
             "pmdec_err",
+            "pm_radec_corr",
             "vrad_err",
         ]
 
@@ -159,8 +157,10 @@ class MWLoaData:
         return bhb_data
 
 
-def load_BHB_data(all_quality_flags=False):
-    """This function selects the BHBs from the Loa catalogue that are used for the DR2 KP."""
+def load_BHB_data(substructure_flags=True, main_bright=True, redrock_star=True):
+    """This function selects the BHBs from the Loa catalogue that are used for the DR2 KP.
+    Some quality flags, like RVS_WARN==0 are already applied. See Bystrom25 for details
+    """
 
     RVT = atpy.Table().read(loa_bhb_file, hdu="RVTAB")
     GT = atpy.Table().read(loa_bhb_file, hdu="GAIA")
@@ -168,10 +168,14 @@ def load_BHB_data(all_quality_flags=False):
 
     survey_idx = (RVT["SURVEY"] == "main") & (RVT["PROGRAM"] == "bright")
     halo_idx = ~(FT["Sgr_flag"] | FT["GC_flag"] | FT["dwarf_flag"])
+    primary_idx = RVT["PRIMARY"] == True
 
-    if all_quality_flags:  # this selection has a slightly higher quality, and in my BHB paper, I don't use the Redrock criterion
-        sel = halo_idx & survey_idx & (RVT["RR_SPECTYPE"] == "STAR")
-    else:
-        sel = halo_idx & survey_idx
+    sel = primary_idx
+    if substructure_flags:
+        sel &= halo_idx
+    if main_bright:
+        sel &= survey_idx
+    if redrock_star:  # this selection has a slightly higher quality, and in my BHB paper, I don't use the Redrock criterion
+        sel &= RVT["RR_SPECTYPE"] == "STAR"
 
     return RVT[sel], FT[sel], GT[sel]

@@ -1,6 +1,15 @@
 import astropy.coordinates as coord
 import astropy.units as u
 import numpy as np
+from ..helpers.coords import add_r_vel_obs_data
+
+
+def prepare_obs_data(obs_data, solar_params, func_log_rho_from_logr, n_dist=10):
+    obs_sample_data = make_distance_samples(obs_data, n_dist=n_dist)
+    obs_sample_data = add_r_vel_obs_data(obs_sample_data, solar_params)
+    obs_sample_data = add_distance_weights(obs_sample_data, func_log_rho_from_logr)
+    obs_sample_data = calc_err_mat_gal(obs_sample_data, solar_params)
+    return obs_sample_data
 
 
 def calc_err_mat_gal(fit_data: dict, solar_params):

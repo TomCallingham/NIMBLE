@@ -43,11 +43,11 @@ def fit_numpyro_nuts(
     data: dict,
     vdisp_min: float = 20.0,
     vdisp_max: float = 400.0,
-    num_warmup: int = 800,
+    num_warmup: int = 400,
     num_samples: int = 1200,
-    num_chains: int = 2,
+    num_chains: int = 1,
     rng_seed: int = 0,
-    target_accept_prob: float = 0.8,
+    target_accept_prob: float = 0.7,
     max_tree_depth: int | None = 7,
     start_x=None,
     progress_bar: bool = True,
@@ -70,18 +70,21 @@ def fit_numpyro_nuts(
 
     # ---------- optional init params ----------
     init_params = None
-    print("5 startup!")
-    start_x = start_x if start_x is not None else np.full(dim, 5.0, dtype=float)
+    print("4 startup!")
+    start_x = start_x if start_x is not None else np.full(dim, 4.0, dtype=float)
     x0 = jnp.asarray(start_x, dtype=jnp.float64)
 
+    print("x0 shape:", x0.shape)
     if x0.shape == (dim,):
-        x0 = jnp.broadcast_to(x0, (int(num_chains), dim))
+        if num_chains > 1:
+            x0 = jnp.broadcast_to(x0, (int(num_chains), dim))
     elif x0.shape == (int(num_chains), dim):
         pass
     else:
         raise ValueError(
             f"start_x must have shape {(dim,)} or {(int(num_chains), dim)}, got {x0.shape}"
         )
+    print("x0 shape after:", x0.shape)
 
     # clip to Uniform support to avoid invalid init
     eps = 1e-12
@@ -103,6 +106,7 @@ def fit_numpyro_nuts(
         max_tree_depth=max_tree_depth,
     )
 
+    print(f"num_chains:{num_chains}")
     # On a single CPU device, vectorized chains is typically the right choice.
     chain_method = "vectorized" if int(num_chains) > 1 else "sequential"
 
@@ -127,7 +131,7 @@ def fit_numpyro_nuts(
     return mcmc, samples
 
 
-def make_loglike_3d_obs_jax(B_jax: jnp.ndarray, nk: int, jitter: float = 0.0):
+def make_loglike_3d_obs_jax(B_jax: jnp.ndarray, nk: int):
     """
     All errors:
       - distance marginalisation over M samples
@@ -147,15 +151,13 @@ def make_loglike_3d_obs_jax(B_jax: jnp.ndarray, nk: int, jitter: float = 0.0):
 
         N, M = logw.shape  # static at trace time
 
-        # split parameters (log sigma at knots)
-        p_r = params_sigma[0:nk]
-        p_t = params_sigma[nk : 2 * nk]
-        p_p = params_sigma[2 * nk : 3 * nk]
+        # params_sigma shape = (3*nk,)
+        P = params_sigma.reshape(3, nk)   # rows: [r, theta, phi]
+        vals = B_jax @ P.T                # (NM, 3)
 
-        # spline-evaluated log(sig) at each sample via basis
-        lsr = B_jax @ p_r  # (NM,)
-        lst = B_jax @ p_t
-        lsp = B_jax @ p_p
+        lsr = vals[:, 0]
+        lst = vals[:, 1]
+        lsp = vals[:, 2]
 
         # intrinsic variances
         sig_r2 = jnp.exp(lsr + lsr)
@@ -163,9 +165,9 @@ def make_loglike_3d_obs_jax(B_jax: jnp.ndarray, nk: int, jitter: float = 0.0):
         sig_p2 = jnp.exp(lsp + lsp)
 
         # symmetric elements of Lambda = Cx + diag(sig^2)
-        a = Cx_f[:, 0, 0] + sig_r2 + jitter
-        d = Cx_f[:, 1, 1] + sig_t2 + jitter
-        f = Cx_f[:, 2, 2] + sig_p2 + jitter
+        a = Cx_f[:, 0, 0] + sig_r2
+        d = Cx_f[:, 1, 1] + sig_t2
+        f = Cx_f[:, 2, 2] + sig_p2
 
         b = Cx_f[:, 1, 0]
         c = Cx_f[:, 2, 0]
@@ -196,7 +198,7 @@ def make_loglike_3d_obs_jax(B_jax: jnp.ndarray, nk: int, jitter: float = 0.0):
 
 
 def setup_and_fit_obs(
-    sample_data, scfg, vdisp_min=20.0, vdisp_max=400.0, jitter=0.0, **mcmc_kwargs
+    sample_data, scfg, vdisp_min=20.0, vdisp_max=400.0, **mcmc_kwargs
 ):
     """
     sample_data must contain:
@@ -210,8 +212,6 @@ def setup_and_fit_obs(
     Cx = np.asarray(sample_data["err_mat_gal"], dtype=np.float64)  # (N,M,3,3)
     logw = np.asarray(sample_data["log_dist_w"], dtype=np.float64)  # (N,M)
 
-    # optional: enforce symmetry once (cheap safety)
-    Cx = 0.5 * (Cx + np.swapaxes(Cx, -1, -2))
 
     N, M = logr.shape
     NM = N * M
@@ -235,7 +235,7 @@ def setup_and_fit_obs(
         "logw": jnp.asarray(logw),  # (N,M)
     }
 
-    loglike_jax = make_loglike_3d_obs_jax(B_j, nk, jitter=float(jitter))
+    loglike_jax = make_loglike_3d_obs_jax(B_j, nk)
 
     mcmc, raw_samples = fit_numpyro_nuts(
         loglike_jax,
