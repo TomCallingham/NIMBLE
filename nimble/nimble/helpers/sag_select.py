@@ -1,5 +1,4 @@
-### THIS FILE is all AMANDA BYSTROM
-# https://github.com/abystrom/apex-likelihood-fitting/tree/main
+# Credit to Amanda Bystrom
 import numpy as np
 from scipy.interpolate import interp1d, splrep, BSpline
 
@@ -100,22 +99,16 @@ def select_Sgr_leadarm(Beta, Lambda, distance):
     leadarmsmooth_func = interp1d(x, smooth_splines(x, leadarm_func(x)))
     leadarmsigsmooth_func = interp1d(x, smooth_splines(x, leadarmsig_func(x)))
 
-    Lambdashift = np.array([(e + 360) if (e < 0) else e for e in Lambda])
+    # Lambdashift = np.array([(e+360) if (e < 0) else e for e in Lambda])
+    Lambdashift = np.mod(Lambda, 360)
     interp_range = (Lambdashift < np.max(x)) & (Lambdashift > np.min(x))
-
     Sgrleadarmdist_idx = np.array(np.zeros(len(Lambdashift)), dtype=bool)
-    for i in range(len(Lambdashift)):
-        if interp_range[i] == True:
-            d = distance[i]
-            dlower = leadarmsmooth_func(Lambdashift[i]) - 3 * leadarmsigsmooth_func(
-                Lambdashift[i]
-            )
-            dupper = leadarmsmooth_func(Lambdashift[i]) + 3 * leadarmsigsmooth_func(
-                Lambdashift[i]
-            )
-            if (d > dlower) & (d < dupper):
-                Sgrleadarmdist_idx[i] = True
 
+    d_mid = leadarmsmooth_func(Lambdashift[interp_range])
+    d_sigma = leadarmsigsmooth_func(Lambdashift[interp_range])
+    Sgrleadarmdist_idx[interp_range] = (
+        np.abs(distance[interp_range] - d_mid) < 3 * d_sigma
+    )
     Sgrcoord_idx = np.abs(Beta) < 15
 
     return Sgrleadarmdist_idx & Sgrcoord_idx
@@ -216,22 +209,15 @@ def select_Sgr_trailarm(Beta, Lambda, distance):
     trailarmsmooth_func = interp1d(x, smooth_splines(x, trailarm_func(x)))
     trailarmsigsmooth_func = interp1d(x, smooth_splines(x, trailarmsig_func(x)))
 
-    Lambdashift = np.array([(e + 360) if (e < 0) else e for e in Lambda])
+    Lambdashift = np.mod(Lambda, 360)
     interp_range = (Lambdashift < np.max(x)) & (Lambdashift > np.min(x))
-
     Sgrtrailarmdist_idx = np.array(np.zeros(len(Lambdashift)), dtype=bool)
-    for i in range(len(Lambdashift)):
-        if interp_range[i] == True:
-            d = distance[i]
-            dlower = trailarmsmooth_func(Lambdashift[i]) - 3 * trailarmsigsmooth_func(
-                Lambdashift[i]
-            )
-            dupper = trailarmsmooth_func(Lambdashift[i]) + 3 * trailarmsigsmooth_func(
-                Lambdashift[i]
-            )
-            if (d > dlower) & (d < dupper):
-                Sgrtrailarmdist_idx[i] = True
 
+    d_mid = trailarmsmooth_func(Lambdashift[interp_range])
+    d_sigma = trailarmsigsmooth_func(Lambdashift[interp_range])
+    Sgrtrailarmdist_idx[interp_range] = (
+        np.abs(distance[interp_range] - d_mid) < 3 * d_sigma
+    )
     Sgrcoord_idx = np.abs(Beta) < 15
 
     return Sgrtrailarmdist_idx & Sgrcoord_idx

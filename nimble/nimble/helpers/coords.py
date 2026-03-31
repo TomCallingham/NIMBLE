@@ -48,6 +48,11 @@ def add_r_vel_obs_data(obs_data, solar_params):
 
     obs_data["v"] = np.linalg.norm(obs_data["vel_gal"], axis=-1)
 
+    obs_data["pos"] = pos
+    obs_data["vel"] = vel
+    obs_data["R"] = np.linalg.norm(obs_data["pos"][..., :2], axis=-1)
+    obs_data["Z"] = obs_data["pos"][..., 2]
+
     if len(data_shape) > 1:
         for key in [
             "ra",
@@ -64,6 +69,8 @@ def add_r_vel_obs_data(obs_data, solar_params):
         ]:
             obs_data[key] = obs_data[key].reshape(data_shape)
         obs_data["vel_gal"] = obs_data["vel_gal"].reshape(*data_shape, 3)
+        obs_data["pos"] = obs_data["pos"].reshape(*data_shape, 3)
+        obs_data["vel"] = obs_data["vel"].reshape(*data_shape, 3)
 
     return obs_data
 

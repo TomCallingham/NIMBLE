@@ -1,3 +1,4 @@
+from typing import Literal
 import numpy as np
 import agama
 import astropy
@@ -5,8 +6,10 @@ import astropy.units as u
 from dataclasses import dataclass
 from ..config import Config
 from .utils import h5py_load, robust_table_to_numpy
-from astropy.table import Table
 from functools import cached_property
+from ..jeans import spline_d_log_dens_convert
+
+from .DR2_code.load_catalogues import load_auridesi
 
 y3kp_folder = "/home/tcallingh/data/observations/local_desi/y3kp/"
 extra_y3kp_folder = "/home/tcallingh/data/observations/local_desi/callingham_new2/y3kp/"
@@ -74,10 +77,38 @@ class AuriDesiData:
         )
         return solar_params
 
-    def load_true_dens_fits(self):
-        load_fname = f"{extra_y3kp_folder}/auridesirrl_true_profiles/auridesirrl_true_profiles_angle{self.angle}_{self.halo_n}_splinefit.hdf5"
-        all_fits = h5py_load(load_fname)
-        return all_fits
+    # def load_true_dens_fits(self):
+    #     load_fname = f"{extra_y3kp_folder}/auridesirrl_true_profiles/auridesirrl_true_profiles_angle{self.angle}_{self.halo_n}_splinefit.hdf5"
+    #     all_fits = h5py_load(load_fname)
+    #     return all_fits
+    def _load_true_dens_fits(self):
+        load_fname = f"{extra_y3kp_folder}/rematchedAurigaTrueProfiles/Au{self.halo_n}Lv3_AccSplineProfiles.hdf5"
+        # auridesirrl_true_profiles/auridesirrl_true_profiles_angle{self.angle}_{self.halo_n}_splinefit.hdf5"
+        new_fits = h5py_load(load_fname)
+        rrl_log_dens_params = new_fits["slice_rematched"]["rrl"][self.angle][
+            "params_logrho"
+        ]
+        rrl_dens_knots_logr = new_fits["slice_rematched"]["rrl"][self.angle][
+            "knots_logr"
+        ]
+        rrl_func_log_dens = agama.Spline(rrl_dens_knots_logr, rrl_log_dens_params)
+        rrl_func_d_log_dens = spline_d_log_dens_convert(rrl_func_log_dens)
+
+        bhb_log_dens_params = new_fits["slice_rematched"]["bhb"][self.angle][
+            "params_logrho"
+        ]
+        bhb_dens_knots_logr = new_fits["slice_rematched"]["bhb"][self.angle][
+            "knots_logr"
+        ]
+        bhb_func_log_dens = agama.Spline(bhb_dens_knots_logr, bhb_log_dens_params)
+        bhb_func_d_log_dens = spline_d_log_dens_convert(bhb_func_log_dens)
+
+        self.rrl_log_dens_func = rrl_func_log_dens
+        self.rrl_d_log_dens_func = rrl_func_d_log_dens
+
+        self.bhb_log_dens_func = bhb_func_log_dens
+        self.bhb_d_log_dens_func = bhb_func_d_log_dens
+        return
 
     def load_true_Menc(self):
         enc_fname = f"{y3kp_folder}/true-profiles/auriga/enclosed-mass-profiles/halo{self.halo_n}-level3-enclosed-mass-profile.csv"
@@ -86,72 +117,23 @@ class AuriDesiData:
         Menc_true = arr[:, 1]
         return r_true, Menc_true
 
-    def load_rrl(self, filt_in_loa=True, filt_sub=True):
-        obs_tab, true_tab = load_auridesi_cat(
-            self.halo_n,
-            view=self.angle,
-            tracer="rrl",
-            filt_in_loa=filt_in_loa,
-            filt_sub=filt_sub,
+    def load_rrl(self):
+        return self.load_tracers("rrl")
+
+    def load_bhb(self):
+        return self.load_tracers("bhb")
+
+    def load_tracers(self, tracer: Literal["rrl", "bhb"]):
+        obs_tab, true_tab, _galcen_frame = load_auridesi(
+            self.halo_n, view=self.angle, tracer=tracer
         )
+        # print("galcen_frame")
+        # print(galcen_frame)
         obs_data = robust_table_to_numpy(obs_tab)
         true_data = robust_table_to_numpy(true_tab)
+
+        au_desi_obs_rename = {"v0": "vrad", "v0_err": "vrad_err"}
+        for key, val in au_desi_obs_rename.items():
+            obs_data[val] = obs_data[key]
+            # true_data[val] = true_data[key]
         return obs_data, true_data
-
-    def load_bhb(self, filt_in_loa=True, filt_sub=True):
-        obs_tab, true_tab = load_auridesi_cat(
-            self.halo_n,
-            view=self.angle,
-            tracer="bhb",
-            filt_in_loa=filt_in_loa,
-            filt_sub=filt_sub,
-        )
-        obs_data = robust_table_to_numpy(obs_tab)
-        true_data = robust_table_to_numpy(true_tab)
-        return obs_data, true_data
-
-
-# basepath = '/global/cfs/cdirs/desi/science/mws/y3kp/'
-# ALEX Load
-def load_auridesi_cat(halo, view, tracer="bhb", filt_in_loa=True, filt_sub=True):
-    """
-    Load AuriDESI mock catalog data for a specified halo, view, and tracer.
-
-    Parameters
-    ----------
-    halo : int
-        The halo identifier number (6, 16, 21, 23, 24, 27).
-    view : int
-        The viewing angle/orientation number (30, 120, 210, 300).
-    tracer : str
-        The tracer type to load, 'bhb' or 'rrl'.
-    apply_cuts : bool, optional
-        If True, apply standard selection cuts. Default is True.
-        These cuts remove:
-        - Stars that are not observed in Loa (sampling p_obs)
-        - Stars that are bound to satellites (pop_id < 2)
-        - Stars that are in massive streams (stream_flag_1e8 == False)
-
-    Returns
-    -------
-    obs : astropy.table.Table
-        Table containing error-convolved properties of tracers.
-    true : astropy.table.Table
-        Table containing true properties of tracers.
-    """
-    cat_path = y3kp_folder + f"field-stars/mocks/auridesi/latest/halo{halo}/"
-    cat_file = cat_path + f"halo{halo}-view{view}-{tracer}.fits"
-
-    obs = Table.read(cat_file, hdu="obs")
-    true = Table.read(cat_file, hdu="true")
-
-    sel = np.ones(len(obs["ra"]), dtype=bool)
-    if filt_in_loa:
-        sel &= obs["in_loa"]  # observed in loa (p_obs sampled)
-    if filt_sub:
-        sel &= true["pop_id"] < 2  # not bound to satellite
-        sel &= ~true["stream_flag_1e8"]  # not in massive stream
-    obs = obs[sel]
-    true = true[sel]
-
-    return obs, true

@@ -238,7 +238,7 @@ def add_distance_weights(sample_data: dict, log_rho_calc, lin_dist=True) -> dict
     """
     r = np.asarray(sample_data["r"], dtype=float)  # (N, n_dist)
     print(r.shape)
-    dens = np.exp(log_rho_calc(r))
+    dens = np.exp(log_rho_calc(np.log(r)))
     if lin_dist:
         print("Linear Dist Draw")
         w = dens * (sample_data["distance"] ** 2)

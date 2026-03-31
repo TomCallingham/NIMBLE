@@ -358,3 +358,31 @@ class DispersionMeanMultiModel3D:  # For sampler
                 log_r, der=1
             )
         return dln_sigma
+
+    def dln_v2_r(self, log_r):
+        """
+        d ln v2_r / d ln r  where  v2_r = sigma_r^2 + mean_r^2
+
+        Uses chain rule:
+            d ln v2_r / d ln r = (2 sigma_r^2 * dln_sigma_r + 2 mean_r * dmean_r_dlnr)
+                                / (sigma_r^2 + mean_r^2)
+        """
+        dln_v2 = np.empty((self.n_sample, len(log_r)))
+        for i in range(self.n_sample):
+            sp_sigma = agama.Spline(self.knots_logr, self.params_sigma_r[i, :])
+            sp_mean = agama.Spline(self.knots_logr, self.params_mean_r[i, :])
+
+            ln_sigma_r = sp_sigma(log_r)  # log sigma_r
+            sigma_r = np.exp(ln_sigma_r)
+            dln_sigma_r = sp_sigma(log_r, der=1)  # d ln sigma_r / d ln r
+
+            mean_r = sp_mean(log_r)  # mean_r (not log)
+            dmean_r_dlnr = sp_mean(log_r, der=1)  # d mean_r / d ln r
+
+            v2_r = sigma_r**2 + mean_r**2
+
+            dln_v2[i, :] = (
+                2.0 * sigma_r**2 * dln_sigma_r + 2.0 * mean_r * dmean_r_dlnr
+            ) / v2_r
+
+        return dln_v2

@@ -6,28 +6,16 @@ import numpy as np
 
 @dataclass()
 class Config:
-    # --- selection / flags ---
-    subsample: bool = False
-    verbose: bool = True
-    use_external_density: bool = False
+    # # --- selection / flags ---
+    # subsample: bool = False
+    # verbose: bool = True
 
-    # --- magnitude / distance parameters (shared, but values depend on run_type) ---
-    # Gmax: float = 20.0
-    # Gmin: float = 16.0
-    # Grrl: float = 0.58
-    # bmin: float = 30.0
-    # decmin: float = -35.0
-    #
-    DMerr: float = 0.24
-
-    # lsr_info: Optional[dict] = None
-
-    # --- spline / knot settings ---
+    # Spline/Knot. Will be fit by the data
     min_knot: float = 5.0
     max_knot: float = 80.0
     num_knots: int = 4
-    min_r: float = 1.0
-    max_r: float = 100.0
+    # min_r: float = 10.0
+    # max_r: float = 100.0
 
     # output / data paths
     figs_root: str = "results/"
@@ -35,7 +23,7 @@ class Config:
     # true_path: Optional[str] = None
 
     def knots_logr(self):
-        return np.linspace(np.log(self.min_knot), np.log(self.max_knot), self.num_knots)
+        return self._knots_logr
 
     def to_small(self):
         return SmallConfig(
@@ -44,26 +32,26 @@ class Config:
             num_knots=self.num_knots,
         )
 
-    def set_knot_range_from_data(self, r, min_percentile=1, max_percentile=99):
-        print(f"Original min-max knot: {self.min_knot:.1f}-{self.max_knot:.1f}")
-        self.min_knot, self.max_knot = np.percentile(
-            r, [min_percentile, max_percentile]
+    def set_quantile_knots(self, r, n_per_bin=1000, n_min=200):
+        print("Creating Knots! n per m{n_per_bin}")
+        r = np.sort(np.asarray(r, dtype=float))
+        r_trimmed = r[n_min:-n_min]
+
+        n_intervals = len(r_trimmed) // n_per_bin
+        quantiles = np.linspace(0, 100, n_intervals + 1)
+        knots = np.percentile(r_trimmed, quantiles)
+        self._knots_logr = np.log(knots)
+        self.min_knot = knots[0]
+        self.max_knot = knots[-1]
+        self.num_knots = len(self._knots_logr)
+        print(
+            f"Created {self.num_knots} Knots"
+            f"Min: {self.min_knot:.2f} - Max: {self.max_knot:.2f} "
         )
-        print(f"New min-max knot: {self.min_knot:.1f}-{self.max_knot:.1f}")
 
 
 # A super slim data container to feed into fitting functions
 @dataclass
 class SmallConfig:
     knots_logr: np.ndarray
-    num_knots: int
-    # lsr_info: Any
-    # Grrl: float
-    # bupp: float
-    # DMerr: float
-    # bmin: float
-    # blow_rad: float
-    # Gmin: float
-    # Gmax: float
-    # lsym: float
-    # lmin_func: Callable
+    num_knots: int  # THIS could be found do I JUST NEED knots
