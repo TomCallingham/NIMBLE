@@ -208,7 +208,7 @@ class DispersionMeanModel:
         return agama.Spline(self.knots_logr, self.params_sigma_r)(log_r, der=1)
 
 
-class DispersionMeanMultiModel3D:  # For sampler
+class DispersionMeanMultiModel3D:
     def __init__(
         self,
         params_sigma_r,
@@ -349,7 +349,7 @@ class DispersionMeanMultiModel3D:  # For sampler
             stats = {"med": med, "o1s": o1s, "u1s": u1s, "o2s": o2s, "u2s": u2s}
             v2_stats[key] = stats
 
-        return sigma_mean_stats
+        return v2_stats
 
     def dln_sigma_r(self, log_r):
         dln_sigma = np.empty((self.n_sample, len(log_r)))

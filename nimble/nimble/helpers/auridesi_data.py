@@ -132,8 +132,9 @@ class AuriDesiData:
         obs_data = robust_table_to_numpy(obs_tab)
         true_data = robust_table_to_numpy(true_tab)
 
-        au_desi_obs_rename = {"v0": "vrad", "v0_err": "vrad_err"}
-        for key, val in au_desi_obs_rename.items():
-            obs_data[val] = obs_data[key]
-            # true_data[val] = true_data[key]
+        if tracer == "rrl":
+            au_desi_obs_rename = {"v0": "vrad", "v0_err": "vrad_err"}
+            for key, val in au_desi_obs_rename.items():
+                obs_data[val] = obs_data[key]
+                # true_data[val] = true_data[key]
         return obs_data, true_data

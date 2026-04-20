@@ -21,6 +21,10 @@ class Config:
     figs_root: str = "results/"
     figs_path: str = "results/"
     # true_path: Optional[str] = None
+    #
+    n_per_bin:int=1000
+    n_min_bound:int=200
+    n_dist_sample:int=1000
 
     def knots_logr(self):
         return self._knots_logr
@@ -32,12 +36,12 @@ class Config:
             num_knots=self.num_knots,
         )
 
-    def set_quantile_knots(self, r, n_per_bin=1000, n_min=200):
-        print("Creating Knots! n per m{n_per_bin}")
+    def set_quantile_knots(self, r):
+        print(f"Creating Knots! n per m{self.n_per_bin}, n_min: {self.n_min_bound}")
         r = np.sort(np.asarray(r, dtype=float))
-        r_trimmed = r[n_min:-n_min]
+        r_trimmed = r[self.n_min_bound:-self.n_min_bound]
 
-        n_intervals = len(r_trimmed) // n_per_bin
+        n_intervals = len(r_trimmed) // self.n_per_bin
         quantiles = np.linspace(0, 100, n_intervals + 1)
         knots = np.percentile(r_trimmed, quantiles)
         self._knots_logr = np.log(knots)

@@ -295,9 +295,9 @@ def setup_and_fit_obs_mean_declining_outlier(
     vdisp_max: float = 400.0,
     lam_mono: float = 1e2,
     r_mono_min: float = 30.0,
-    sig_outlier: float = 400.0,
+    sig_outlier: float = 600.0,
     f_outlier_alpha: float = 1.0,
-    f_outlier_beta: float = 10.0,
+    f_outlier_beta: float = 100.0,
     **mcmc_kwargs,
 ):
     """
@@ -388,28 +388,23 @@ def setup_and_fit_obs_mean_declining_outlier(
     return mcmc, sigma_samples, mean_samples, f_outlier_samples, multi_disp
 
 
-import jax
+# import agama
+# import jax.numpy as jnp
+# import jax.scipy.special as jsp_special
 
-jax.config.update("jax_enable_x64", True)
+# from nimble.models import DispersionMeanMultiModel3D
+# from nimble.fitting.fitting_numpyro import (
+#     build_agama_spline_basis_1d,
+#     chol3x3_from_sym,
+#     forward_solve_lower3,
+# )
 
-import numpy as np
-import agama
-import jax.numpy as jnp
-import jax.scipy.special as jsp_special
-
-from nimble.models import DispersionMeanMultiModel3D
-from nimble.fitting.fitting_numpyro import (
-    build_agama_spline_basis_1d,
-    chol3x3_from_sym,
-    forward_solve_lower3,
-)
-
-from nimble.fitting.fitting_mean_decline import build_agama_spline_basis_deriv_1d
+# from nimble.fitting.fitting_mean_decline import build_agama_spline_basis_deriv_1d
 
 
-import numpyro
-import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS
+# import numpyro
+# import numpyro.distributions as dist
+# from numpyro.infer import MCMC, NUTS
 
 
 def compute_outlier_probabilities(
