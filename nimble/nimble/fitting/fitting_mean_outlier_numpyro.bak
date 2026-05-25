@@ -1,21 +1,11 @@
-# VERY FIRST CELL, before any JAX import
-import os
-
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import jax
-import time
-import gc
 
 jax.config.update("jax_enable_x64", True)
 
 import numpy as np
+import agama
 import jax.numpy as jnp
 import jax.scipy.special as jsp_special
-
-import numpyro
-import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS
 
 from ..models import DispersionMeanMultiModel3D
 from .fitting_numpyro import (
@@ -24,18 +14,29 @@ from .fitting_numpyro import (
     forward_solve_lower3,
 )
 
+from .fitting_mean_decline import build_agama_spline_basis_deriv_1d
+
+
+import numpyro
+import numpyro.distributions as dist
+from numpyro.infer import MCMC, NUTS
+
 
 # ---------------------------------------------------------------------------
-# Log-likelihood: mean + outlier mixture (no monotonicity penalty)
+# Log-likelihood: declining + outlier mixture
 # ---------------------------------------------------------------------------
-def make_loglike_3d_obs_jax_mean_outlier(
+
+
+def make_loglike_3d_obs_jax_mean_declining_outlier(
     B_jax: jnp.ndarray,  # (NM, nk)  value basis
+    B_der_jax: jnp.ndarray,  # (Np, nk)  first-derivative basis at penalty points
     nk: int,
+    lam_mono: float = 1e2,
     sig_outlier: float = 600.0,
 ):
     """
-    3D observed-frame log-likelihood with a fixed broad Gaussian outlier
-    mixture component:
+    Identical to make_loglike_3d_obs_jax_mean_declining, but mixes in a
+    fixed broad Gaussian outlier component:
 
         log p(x_n) = log[ (1 - f_out) * p_main(x_n) + f_out * p_out(x_n) ]
 
@@ -45,10 +46,10 @@ def make_loglike_3d_obs_jax_mean_outlier(
     f_outlier is read from data["f_outlier"] — a JAX scalar sampled by the
     NumPyro model, so it is fully traceable without touching the params vector.
 
-    params layout: [lsig_r | lsig_t | lsig_p | mu_r | mu_t | mu_p]
-    Total length: 6 * nk.
+    params layout is unchanged: [lsig_r | lsig_t | lsig_p | mu_r | mu_t | mu_p]
+    Total length: 6 * nk  (same as the non-outlier version).
 
-    Note: the variable for the (3,3) symmetric matrix element is named `fcc`
+    Note: the variable for the (3,3) symmetric matrix element is renamed `fcc`
     here to avoid collision with `f_out`.
     """
     sig_out2 = sig_outlier**2
@@ -143,6 +144,14 @@ def make_loglike_3d_obs_jax_mean_outlier(
         logp_star = jsp_special.logsumexp(branches, axis=1)  # (N,)
         total = jnp.sum(logp_star)
 
+        # ------------------------------------------------------------------
+        # One-sided monotonicity penalty (main component only)
+        # ------------------------------------------------------------------
+        derivs = B_der_jax @ P[:3].T  # (Np, 3)
+        violations = jnp.maximum(0.0, derivs)
+        mono_pen = lam_mono * jnp.sum(violations**2)
+        total = total - mono_pen
+
         ok_all = jnp.all(ok) & jnp.all(ok_o) & jnp.isfinite(total)
         return jnp.where(ok_all, total, -jnp.inf)
 
@@ -150,8 +159,11 @@ def make_loglike_3d_obs_jax_mean_outlier(
 
 
 # ---------------------------------------------------------------------------
-# NumPyro NUTS fitter — pulls samples to host and releases GPU memory
+# NumPyro NUTS fitter — self-contained, adds f_outlier sample site
 # ---------------------------------------------------------------------------
+import time
+
+
 def fit_numpyro_nuts_mean_outlier(
     loglike_fn,
     nk: int,
@@ -266,64 +278,42 @@ def fit_numpyro_nuts_mean_outlier(
     )
 
     rng_key = jax.random.PRNGKey(int(rng_seed))
-    mcmc.run(
-        rng_key,
-        init_params=init_params,
-        extra_fields=("diverging", "num_steps"),
-    )
+    mcmc.run(rng_key, init_params=init_params)
 
-    # --- pull everything off device BEFORE releasing mcmc ---
-    raw_samples = jax.device_get(mcmc.get_samples(group_by_chain=False))
-
-    diagnostics = {}
-    extra = mcmc.get_extra_fields()
-    if extra:
-        extra_host = jax.device_get(extra)
-        if "diverging" in extra_host:
-            diagnostics["num_divergences"] = int(np.sum(extra_host["diverging"]))
-        if "num_steps" in extra_host:
-            diagnostics["mean_tree_depth"] = float(
-                np.mean(np.log2(extra_host["num_steps"] + 1))
-            )
-
-    # --- drop device state, clear JIT cache, force GC ---
-    del mcmc, kernel
-    jax.clear_caches()
-    gc.collect()
+    raw_samples = mcmc.get_samples(group_by_chain=False)
 
     print("Fit complete!")
     print(f"Time taken: {(time.time() - dt) / 60:.3f} mins")
-    if diagnostics:
-        print(f"Diagnostics: {diagnostics}")
 
-    return raw_samples, diagnostics
+    return mcmc, raw_samples
 
 
-# ---------------------------------------------------------------------------
-# Wrapper: build basis, call the fitter, build multi_disp on host arrays
-# ---------------------------------------------------------------------------
-def setup_and_fit_obs_mean_outlier(
+def setup_and_fit_obs_mean_declining_outlier(
     sample_data,
     scfg,
     vdisp_min: float = 20.0,
     vdisp_max: float = 400.0,
+    lam_mono: float = 1e2,
+    r_mono_min: float = 30.0,
     sig_outlier: float = 600.0,
     f_outlier_alpha: float = 1.0,
     f_outlier_beta: float = 100.0,
     **mcmc_kwargs,
 ):
     """
-    3D spherical velocity-dispersion + mean fit with a fixed broad-Gaussian
-    outlier mixture component. No monotonicity / declining-sigma prior.
+    Extends setup_and_fit_obs_mean_declining with a fixed broad-Gaussian
+    outlier mixture component.
 
-    After the NUTS run, posterior samples are transferred to host (numpy)
-    memory, the MCMC object is released, and the JAX JIT/compile cache is
-    cleared so GPU memory is returned for the next fit.
+    Extra parameters
+    ----------------
+    sig_outlier      : dispersion (km/s) of the outlier Gaussian (default 400)
+    f_outlier_alpha  : Beta prior shape α for f_outlier (default 1)
+    f_outlier_beta   : Beta prior shape β for f_outlier (default 10)
+                       E[f] = α/(α+β); default ≈ 9 %
 
     Returns
     -------
-    sigma_samples, mean_samples, f_outlier_samples, multi_disp, diagnostics
-        All arrays are numpy (host memory).
+    mcmc, sigma_samples, mean_samples, f_outlier_samples, multi_disp
     """
     logr = np.asarray(sample_data["logr"], dtype=np.float64)
     x = np.asarray(sample_data["vel_gal"], dtype=np.float64)
@@ -345,6 +335,17 @@ def setup_and_fit_obs_mean_outlier(
     B = build_agama_spline_basis_1d(logr_f, knots)
     B_j = jnp.asarray(B)
 
+    # Derivative basis (knots + midpoints, clipped to r > r_mono_min)
+    knot_mids = 0.5 * (knots[:-1] + knots[1:])
+    x_pen_all = np.sort(np.concatenate([knots, knot_mids]))
+    x_pen = x_pen_all[x_pen_all > np.log(r_mono_min)]
+    B_der = build_agama_spline_basis_deriv_1d(x_pen, knots, der=1)
+    B_der_j = jnp.asarray(B_der)
+
+    print(
+        f"Monotonicity penalty: {x_pen.size} evaluation points, "
+        f"lam_mono={lam_mono:.3g}, r_mono_min={r_mono_min} kpc"
+    )
     print(
         f"Outlier component: sig_outlier={sig_outlier} km/s, "
         f"Beta({f_outlier_alpha}, {f_outlier_beta}) prior"
@@ -354,17 +355,19 @@ def setup_and_fit_obs_mean_outlier(
         "x_f": jnp.asarray(x_f),
         "Cx_f": jnp.asarray(Cx_f),
         "logw": jnp.asarray(logw),
-        # f_outlier is NOT in data_j — it is injected as a sampled JAX scalar
-        # by fit_numpyro_nuts_mean_outlier before each loglike evaluation.
+        # f_outlier is NOT in data_j here — it is injected by fit_numpyro_nuts_mean_outlier
+        # as a sampled JAX scalar before each loglike evaluation.
     }
 
-    loglike_jax = make_loglike_3d_obs_jax_mean_outlier(
+    loglike_jax = make_loglike_3d_obs_jax_mean_declining_outlier(
         B_j,
+        B_der_j,
         nk,
+        lam_mono=float(lam_mono),
         sig_outlier=float(sig_outlier),
     )
 
-    raw_samples, diagnostics = fit_numpyro_nuts_mean_outlier(
+    mcmc, raw_samples = fit_numpyro_nuts_mean_outlier(
         loglike_jax,
         nk=nk,
         data=data_j,
@@ -375,7 +378,6 @@ def setup_and_fit_obs_mean_outlier(
         **mcmc_kwargs,
     )
 
-    # These are numpy arrays on host.
     sigma_samples = raw_samples["params_sigma"]
     mean_samples = raw_samples["params_mean"]
     f_outlier_samples = raw_samples["f_outlier"]
@@ -383,20 +385,28 @@ def setup_and_fit_obs_mean_outlier(
     multi_disp = DispersionMeanMultiModel3D.from_sampler_3d(
         sigma_samples, mean_samples, scfg.knots_logr
     )
-
-    # Belt-and-braces: drop any device arrays staged by basis construction or
-    # by from_sampler_3d, and release the JIT cache a second time.
-    del B_j, data_j, loglike_jax
-    jax.clear_caches()
-    gc.collect()
-    # jax.clear_backends()
-
-    return diagnostics, sigma_samples, mean_samples, f_outlier_samples, multi_disp
+    return mcmc, sigma_samples, mean_samples, f_outlier_samples, multi_disp
 
 
-# ---------------------------------------------------------------------------
-# Per-star outlier responsibility
-# ---------------------------------------------------------------------------
+# import agama
+# import jax.numpy as jnp
+# import jax.scipy.special as jsp_special
+
+# from nimble.models import DispersionMeanMultiModel3D
+# from nimble.fitting.fitting_numpyro import (
+#     build_agama_spline_basis_1d,
+#     chol3x3_from_sym,
+#     forward_solve_lower3,
+# )
+
+# from nimble.fitting.fitting_mean_decline import build_agama_spline_basis_deriv_1d
+
+
+# import numpyro
+# import numpyro.distributions as dist
+# from numpyro.infer import MCMC, NUTS
+
+
 def compute_outlier_probabilities(
     sample_data: dict,
     scfg,
@@ -409,13 +419,9 @@ def compute_outlier_probabilities(
     Per-star posterior mean outlier responsibility, computed via vmap over
     posterior samples.
 
-    The mean responsibility is transferred to host memory before returning,
-    and the JAX JIT/compile cache is cleared so GPU memory is released for
-    subsequent fits.
-
     Returns
     -------
-    p_out_star : (N,)  posterior mean outlier probability per star (numpy)
+    p_out_star : (N,)  posterior mean outlier probability per star
     """
     logr = np.asarray(sample_data["logr"], dtype=np.float64)
     x = np.asarray(sample_data["vel_gal"], dtype=np.float64)
@@ -517,24 +523,6 @@ def compute_outlier_probabilities(
         )
         return jnp.exp(log_num - log_den)  # (N,)
 
-    # vmap over S samples, then average on device
+    # vmap over S samples, then average
     responsibilities = jax.vmap(responsibility_one_sample)(params_all, f_all)  # (S, N)
-    p_out_device = responsibilities.mean(axis=0)  # (N,)
-
-    # --- pull result to host, drop device arrays, clear JIT cache ---
-    p_out_star = np.asarray(jax.device_get(p_out_device))
-
-    del (
-        x_f,
-        Cx_f,
-        logw_j,
-        B_j,
-        params_all,
-        f_all,
-        responsibilities,
-        p_out_device,
-    )
-    jax.clear_caches()
-    gc.collect()
-
-    return p_out_star
+    return np.asarray(responsibilities.mean(axis=0))  # (N,):w

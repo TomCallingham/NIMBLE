@@ -2,6 +2,7 @@ import astropy.coordinates as coord
 import astropy.units as u
 import numpy as np
 from ..helpers.coords import add_r_vel_obs_data
+from scipy.stats import truncnorm
 
 
 def prepare_obs_data(obs_data, solar_params, func_log_rho_from_logr, n_dist=10):
@@ -245,6 +246,9 @@ def add_distance_weights(sample_data: dict, log_rho_calc, lin_dist=True) -> dict
     else:
         print("Log Dist Draw")
         w = dens * (sample_data["distance"] ** 3)
+
+    print("NEW DISTANCE FACTOR!!!")
+    w *= sample_data["distance"] ** 2
 
     esp = 1e-300
     w[w < esp] = esp

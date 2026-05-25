@@ -394,3 +394,70 @@ class MultiSmoothDoublePowerLaw:
 
     def stats_dlnrho(self, r: np.ndarray):
         return calc_stats(self.dlnrho(r), axis=0)
+
+
+M24_R_break = 18.1
+M24_slope_inner = -2.05
+M24_slope_outer = -4.47
+M24_delta = 0.1
+M24_R_break_err = (1.1, 2.1)
+M24_slope_inner_err = (0.15, 0.13)
+M24_slope_outer_err = (0.18, 0.11)
+
+
+def create_Medina24RRL_SmoothPowerLaw():
+    smooth_Medina24RRL = SmoothDoublePowerLaw(
+        R_break=M24_R_break,
+        slope_inner=M24_slope_inner,
+        slope_outer=M24_slope_outer,
+        delta=M24_delta,
+    )
+    return smooth_Medina24RRL
+
+
+def create_Medina24RRL_MultiSmoothPowerLaw(n_sample=1200):
+    multismooth_Medina24RRL = MultiSmoothDoublePowerLaw(
+        R_break=M24_R_break,
+        slope_inner=M24_slope_inner,
+        slope_outer=M24_slope_outer,
+        delta=M24_delta,
+        n_sample=n_sample,
+        R_break_err=M24_R_break_err,
+        slope_inner_err=M24_slope_inner_err,
+        slope_outer_err=M24_slope_outer_err,
+    )
+    return multismooth_Medina24RRL
+
+
+A24_R_break = 19.15
+# A24_slope_inner=-2.45
+A24_slope_inner = -2.9
+A24_slope_outer = -4.55
+A24_delta = 0.1
+A24_R_break_err = (1.8, 1.7)
+A24_slope_inner_err = (0.14, 0.17)
+A24_slope_outer_err = (0.1, 0.11)
+
+
+def create_Amarante24BHB_SmoothPowerLaw():
+    smooth_Amarante24BHB = SmoothDoublePowerLaw(
+        R_break=A24_R_break,
+        slope_inner=A24_slope_inner,
+        slope_outer=A24_slope_outer,
+        delta=A24_delta,
+    )
+    return smooth_Amarante24BHB
+
+
+def create_Amarante24BHB_MultiSmoothPowerLaw(n_sample=1200):
+    multismooth_Amarante24BHB = MultiSmoothDoublePowerLaw(
+        R_break=A24_R_break,
+        slope_inner=A24_slope_inner,
+        slope_outer=A24_slope_outer,
+        delta=A24_delta,
+        n_sample=n_sample,
+        R_break_err=A24_R_break_err,
+        slope_inner_err=A24_slope_inner_err,
+        slope_outer_err=A24_slope_outer_err,
+    )
+    return multismooth_Amarante24BHB

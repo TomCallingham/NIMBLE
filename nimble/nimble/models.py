@@ -1,5 +1,6 @@
 import numpy as np
 import agama
+import jax
 
 
 class DispersionModel:
@@ -231,6 +232,12 @@ class DispersionMeanMultiModel3D:
 
     @classmethod
     def from_sampler_3d(cls, sigma_samples, mean_samples, knots_logr):
+        # Force host-memory numpy arrays — even if callers pass JAX arrays,
+        # the model object should not pin GPU memory.
+        sigma_samples = np.asarray(jax.device_get(sigma_samples))
+        mean_samples = np.asarray(jax.device_get(mean_samples))
+        knots_logr = np.asarray(knots_logr)
+
         num_knots = len(knots_logr)
         params_sigma_r = sigma_samples[:, :num_knots]
         params_sigma_theta = sigma_samples[:, num_knots : 2 * num_knots]
@@ -386,3 +393,28 @@ class DispersionMeanMultiModel3D:
             ) / v2_r
 
         return dln_v2
+
+    def save(self, path):
+        np.savez(
+            path,
+            params_sigma_r=self.params_sigma_r,
+            params_sigma_theta=self.params_sigma_theta,
+            params_sigma_phi=self.params_sigma_phi,
+            params_mean_r=self.params_mean_r,
+            params_mean_theta=self.params_mean_theta,
+            params_mean_phi=self.params_mean_phi,
+            knots_logr=self.knots_logr,
+        )
+
+    @classmethod
+    def load(cls, path):
+        with np.load(path) as f:
+            return cls(
+                params_sigma_r=f["params_sigma_r"],
+                params_sigma_theta=f["params_sigma_theta"],
+                params_sigma_phi=f["params_sigma_phi"],
+                params_mean_r=f["params_mean_r"],
+                params_mean_theta=f["params_mean_theta"],
+                params_mean_phi=f["params_mean_phi"],
+                knots_logr=f["knots_logr"],
+            )
